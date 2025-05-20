@@ -331,18 +331,5 @@ class NaverNewsCrawler:
         
     def close(self):
         """브라우저 종료"""
-        self.driver.quit()
-
-if __name__ == "__main__":
-    # 크롤러 인스턴스 생성
-    crawler = NaverNewsCrawler()
-    
-    # 언론사 이름 입력 받기
-    press_name = input("크롤링할 언론사 이름을 입력하세요: ")
-    
-    try:
-        # 크롤링 실행
-        crawler.crawl_press_news(press_name)
-    finally:
-        # 브라우저 종료
-        crawler.close() 
+        self.driver.quit() 
+        
