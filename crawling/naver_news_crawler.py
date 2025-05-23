@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import re
 import os
 import json
+import requests
 
 class NaverNewsCrawler:
     def __init__(self):
@@ -26,6 +27,8 @@ class NaverNewsCrawler:
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         chrome_options.add_argument('--log-level=3')  # 로그 레벨을 최소화
         chrome_options.add_argument('--silent')  # 로그 출력 억제
+        chrome_options.add_argument('--disable-software-rasterizer')  # WebGL 경고 억제
+        chrome_options.add_argument('--disable-webgl')  # WebGL 비활성화
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])  # 로그 스위치 비활성화
         chrome_options.add_experimental_option('useAutomationExtension', False)
         
@@ -144,67 +147,119 @@ class NaverNewsCrawler:
             if 'sid1=100' in current_url:  # 정치 섹션 ID
                 return True
                 
+            # 모바일 URL을 데스크톱 URL로 변환
+            if 'n.news.naver.com/mnews' in current_url:
+                article_id = current_url.split('/')[-1]
+                oid = article_id.split('_')[0]
+                aid = article_id.split('_')[1]
+                desktop_url = f"https://news.naver.com/main/read.naver?mode=LSD&mid=sec&oid={oid}&aid={aid}"
+                self.driver.get(desktop_url)
+                time.sleep(2)
+                
             # 카테고리 확인
             try:
-                category = self.driver.find_element(By.CSS_SELECTOR, "a.category_link").text
+                category = self.driver.find_element(By.CSS_SELECTOR, "a.category_link, a.media_end_head_category_link").text
                 return "정치" in category
             except:
                 pass
+            
+            # 제목이나 내용에서 정치 관련 키워드 확인
+            try:
+                title = self.driver.find_element(By.CSS_SELECTOR, "h2.media_end_head_headline, h3.tit_view").text
+                content = self.driver.find_element(By.CSS_SELECTOR, "div#newsct_article, div#articeBody").text
                 
-            # 본문 내용에서 정치 관련 키워드 확인
-            content = self.driver.find_element(By.CSS_SELECTOR, "div#newsct_article").text
-            politics_keywords = ['정치', '대통령', '국회', '여야', '여당', '야당', '장관', '총리']
-            return any(keyword in content for keyword in politics_keywords)
+                politics_keywords = ['정치', '대통령', '여야', '국회', '장관', '총리', '정부', '청와대', '여당', '야당']
+                for keyword in politics_keywords:
+                    if keyword in title or keyword in content:
+                        return True
+            except:
+                pass
             
         except:
             return False
             
+        return False
+            
     def get_news_content(self):
         """뉴스 기사 내용 가져오기"""
         try:
-            # 기본 정보 추출
-            title = self.driver.find_element(By.CSS_SELECTOR, "h2.media_end_head_headline, h3.tit_view").text
-            content = self.driver.find_element(By.CSS_SELECTOR, "div#newsct_article, div#articeBody").text
+            # 모바일 URL을 데스크톱 URL로 변환
+            current_url = self.driver.current_url
+            if 'n.news.naver.com/mnews' in current_url:
+                # URL에서 oid와 aid 추출
+                parts = current_url.split('/')
+                oid = parts[-2]  # 028
+                aid = parts[-1]  # 0002747473
+                desktop_url = f"https://news.naver.com/main/read.naver?mode=LSD&mid=sec&oid={oid}&aid={aid}"
+                # print(f"데스크톱 URL로 변환: {desktop_url}")
+                self.driver.get(desktop_url)
+                time.sleep(1)  # 2초에서 1초로 감소
+
+            # 기본 정보 추출 - 명시적 대기 추가
+            title = self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "h2.media_end_head_headline, h3.tit_view"))
+            ).text
+
+            # 본문 내용 추출 - 여러 선택자 시도
+            content = None
+            for selector in ["div#newsct_article", "div#articeBody", "div#articleBodyContents"]:
+                try:
+                    content = self.wait.until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    ).text
+                    if content:
+                        break
+                except:
+                    continue
+
+            if not content:
+                # print("본문 내용을 찾을 수 없습니다.")
+                return None
             
             # 작성일시와 수정일시
-            date_elements = self.driver.find_elements(By.CSS_SELECTOR, "span.media_end_head_info_datestamp_time, span.date")
-            created_date = date_elements[0].text if len(date_elements) > 0 else None
-            modified_date = date_elements[1].text if len(date_elements) > 1 else None
+            try:
+                date_elements = self.driver.find_elements(By.CSS_SELECTOR, "span.media_end_head_info_datestamp_time, span.date, span.media_end_head_info_datestamp")
+                # print(f"찾은 날짜 요소 수: {len(date_elements)}")
+                created_date = date_elements[0].text if len(date_elements) > 0 else None
+                modified_date = date_elements[1].text if len(date_elements) > 1 else None
+            except Exception as e:
+                # print(f"날짜 정보 추출 중 에러: {str(e)}")
+                created_date = None
+                modified_date = None
             
             # 기자 정보
             try:
-                journalist = self.driver.find_element(By.CSS_SELECTOR, "em.media_end_head_journalist_name, span.writer").text
-            except:
+                journalist = self.driver.find_element(By.CSS_SELECTOR, "em.media_end_head_journalist_name, span.writer, span.media_end_head_journalist").text
+            except Exception as e:
+                # print(f"기자 정보 추출 중 에러: {str(e)}")
                 journalist = None
-            
-            # 이미지 URL 추출
-            try:
-                image_url = self.driver.find_element(By.CSS_SELECTOR, "img.end_photo_org, img.news_end_photo").get_attribute("src")
-            except:
-                image_url = None
             
             # 댓글 수 추출
             try:
-                comment_count = self.driver.find_element(By.CSS_SELECTOR, "a.media_end_head_cmtcount_button, a.cmt_count").text
+                comment_count = self.driver.find_element(By.CSS_SELECTOR, "a.media_end_head_cmtcount_button, a.cmt_count, span.media_end_head_cmtcount").text
                 comment_count = int(re.sub(r'[^0-9]', '', comment_count))
-            except:
+            except Exception as e:
+                # print(f"댓글 수 추출 중 에러: {str(e)}")
                 comment_count = 0
             
             # 관련 기사 추출
             related_articles = []
             try:
-                related_items = self.driver.find_elements(By.CSS_SELECTOR, "li.media_end_linked_item, li.related_item")
+                related_items = self.driver.find_elements(By.CSS_SELECTOR, "li.media_end_linked_item, li.related_item, div.media_end_head_related_news li")
+                # print(f"찾은 관련 기사 수: {len(related_items)}")
                 for item in related_items:
                     try:
-                        related_title = item.find_element(By.CSS_SELECTOR, "a.media_end_linked_item_inner, a.related_tit").text
-                        related_url = item.find_element(By.CSS_SELECTOR, "a.media_end_linked_item_inner, a.related_tit").get_attribute("href")
+                        related_title = item.find_element(By.CSS_SELECTOR, "a.media_end_linked_item_inner, a.related_tit, a").text
+                        related_url = item.find_element(By.CSS_SELECTOR, "a.media_end_linked_item_inner, a.related_tit, a").get_attribute("href")
                         related_articles.append({
                             'title': related_title,
                             'url': related_url
                         })
-                    except:
+                    except Exception as e:
+                        # print(f"관련 기사 항목 처리 중 에러: {str(e)}")
                         continue
-            except:
+            except Exception as e:
+                # print(f"관련 기사 추출 중 에러: {str(e)}")
                 pass
             
             return {
@@ -213,12 +268,12 @@ class NaverNewsCrawler:
                 'created_date': created_date,
                 'modified_date': modified_date,
                 'journalist': journalist,
-                'image_url': image_url,
                 'comment_count': comment_count,
                 'related_articles': related_articles
             }
         except Exception as e:
-            print(f"Error extracting news content: {e}")
+            print(f"Error extracting news content: {str(e)}")
+            print(f"현재 URL: {self.driver.current_url}")
             return None
             
     def crawl_press_news(self, press_name, start_date=None, end_date=None):
@@ -230,6 +285,16 @@ class NaverNewsCrawler:
             start_date (str): 시작 날짜 (YYYY-MM-DD)
             end_date (str): 종료 날짜 (YYYY-MM-DD)
         """
+        # 날짜 형식 검증
+        try:
+            if start_date:
+                start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+            if end_date:
+                end_datetime = datetime.strptime(end_date, '%Y-%m-%d')
+        except ValueError:
+            print("날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 입력해주세요.")
+            return
+
         # 언론사 링크 찾기
         press_url = self.find_press_link(press_name)
         if not press_url:
@@ -239,61 +304,159 @@ class NaverNewsCrawler:
         # 정치 섹션으로 이동
         politics_url = press_url + "&sid1=100"  # 정치 섹션 ID 추가
         self.driver.get(politics_url)
-        time.sleep(3)
+        # print(f"{press_name} 뉴스 페이지를 여는 중입니다...")
+        time.sleep(1)  # 3초에서 1초로 감소
         
         news_data = []
-        page = 1
+        page_count = 1
+        previous_date = None
+        current_date = datetime.now()  # 초기 날짜 설정
+        print("=" * 30)
+        print(f"현재 페이지 날짜: {current_date.strftime('%Y-%m-%d')}")
+        print("=" * 30)
         
         while True:
             try:
+                # 시작 날짜와 비교 (같은 날짜도 포함)
+                if start_date and current_date < start_datetime:
+                    print(f"현재 날짜({current_date.strftime('%Y-%m-%d')})가 시작 날짜({start_date})보다 이전입니다. 크롤링을 종료합니다.")
+                    break
+                
                 # 뉴스 목록 대기
                 news_items = self.wait.until(
                     EC.presence_of_all_elements_located((By.CSS_SELECTOR, "ul.type06_headline li, ul.type06 li"))
                 )
                 
+                print("-" * 30)
+                print(f"현재 페이지: {page_count}")
+                print(f"현재 페이지에서 {len(news_items)}개의 뉴스 항목을 찾았습니다.")
+                print("-" * 30)
+                
                 # 현재 페이지의 뉴스 데이터 수집
                 for item in news_items:
                     try:
-                        # 뉴스 링크 찾기
-                        news_link = item.find_element(By.CSS_SELECTOR, "dt a")
+                        # 뉴스 링크와 제목 찾기
+                        news_link = item.find_element(By.CSS_SELECTOR, "dt:not(.photo) a")
+                        title = news_link.text.strip()
                         news_url = news_link.get_attribute("href")
+                        
+                        if not title or not news_url:
+                            # print("제목 또는 링크가 비어있어 건너뜁니다.")
+                            continue
+                            
+                        # print(f"뉴스 제목: {title}")
+                        # print(f"뉴스 링크: {news_url}")
                         
                         # 새 탭에서 뉴스 열기
                         self.driver.execute_script(f"window.open('{news_url}', '_blank');")
+                        time.sleep(0.5)  # 2초에서 0.5초로 감소
+                        
+                        # 새 탭으로 전환
+                        if len(self.driver.window_handles) <= 1:
+                            # print("새 탭이 열리지 않았습니다.")
+                            continue
+                            
                         self.driver.switch_to.window(self.driver.window_handles[-1])
-                        time.sleep(2)
+                        # print(f"새 탭으로 전환됨. 현재 URL: {self.driver.current_url}")
                         
-                        # 정치 뉴스인지 확인
-                        if self.is_politics_news():
-                            news_info = self.get_news_content()
-                            if news_info:
-                                news_info['press'] = press_name
-                                news_info['url'] = news_url
-                                news_data.append(news_info)
-                                print(f"[{len(news_data)}] {news_info['title']}")
+                        # 페이지 로딩 대기
+                        self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
                         
-                        # 탭 닫고 원래 탭으로 돌아가기
-                        self.driver.close()
-                        self.driver.switch_to.window(self.driver.window_handles[0])
-                        
+                        # 뉴스 내용 가져오기
+                        news_info = self.get_news_content()
+                        if news_info:
+                            news_info['press'] = press_name
+                            news_info['url'] = news_url
+                            news_data.append(news_info)
+                            print(f"[{len(news_data)}] {news_info['title']}")  # 진행 상황 표시는 유지
+                        else:
+                            print("뉴스 내용을 가져오지 못했습니다.")
+                            pass
+                            
                     except Exception as e:
+                        # print(f"뉴스 항목 처리 중 에러 발생: {str(e)}")
+                        pass
+                    finally:
                         # 탭이 열려있다면 닫기
                         if len(self.driver.window_handles) > 1:
                             self.driver.close()
                             self.driver.switch_to.window(self.driver.window_handles[0])
-                        continue
                 
                 # 다음 페이지 버튼 확인
                 try:
-                    next_button = self.driver.find_element(By.CSS_SELECTOR, "a.btn_next, a.next")
-                    if "disabled" in next_button.get_attribute("class"):
-                        break
-                    next_button.click()
-                    time.sleep(3)
-                    page += 1
-                    print(f"\n=== {page}페이지 크롤링 중... ===")
+                    # 다음 페이지 링크 찾기
+                    next_page_link = self.driver.find_element(By.CSS_SELECTOR, f"div.paging a[href*='page={page_count + 1}']")
+                    if next_page_link:
+                        next_page_link.click()
+                        time.sleep(1)  # 3초에서 1초로 감소
+                        page_count += 1
+                        # print(f"다음 페이지로 이동합니다...")
+                    else:
+                        print("다음 페이지가 없습니다.")
+                        # 다음 날짜로 이동
+                        current_url = self.driver.current_url
+                        if 'date=' in current_url:
+                            current_date_str = current_date.strftime('%Y%m%d')
+                            next_date = current_date - timedelta(days=1)
+                            next_date_str = next_date.strftime('%Y%m%d')
+                            next_url = current_url.replace(f'date={current_date_str}', f'date={next_date_str}')
+                            self.driver.get(next_url)
+                            time.sleep(1)  # 3초에서 1초로 감소
+                            page_count = 1
+                            previous_date = current_date
+                            current_date = next_date
+                            print("=" * 30)
+                            print(f"현재 페이지 날짜: {current_date.strftime('%Y-%m-%d')}")
+                            print("=" * 30)
+                        else:
+                            # date 파라미터가 없는 경우 직접 추가
+                            next_date = current_date - timedelta(days=1)
+                            next_date_str = next_date.strftime('%Y%m%d')
+                            if '?' in current_url:
+                                next_url = f"{current_url}&date={next_date_str}"
+                            else:
+                                next_url = f"{current_url}?date={next_date_str}"
+                            self.driver.get(next_url)
+                            time.sleep(1)  # 3초에서 1초로 감소
+                            page_count = 1
+                            previous_date = current_date
+                            current_date = next_date
+                            print("=" * 30)
+                            print(f"현재 페이지 날짜: {current_date.strftime('%Y-%m-%d')}")
+                            print("=" * 30)
                 except NoSuchElementException:
-                    break
+                    print("다음 페이지를 찾을 수 없습니다.")
+                    # 다음 날짜로 이동
+                    current_url = self.driver.current_url
+                    if 'date=' in current_url:
+                        current_date_str = current_date.strftime('%Y%m%d')
+                        next_date = current_date - timedelta(days=1)
+                        next_date_str = next_date.strftime('%Y%m%d')
+                        next_url = current_url.replace(f'date={current_date_str}', f'date={next_date_str}')
+                        self.driver.get(next_url)
+                        time.sleep(1)  # 3초에서 1초로 감소
+                        page_count = 1
+                        previous_date = current_date
+                        current_date = next_date
+                        print("=" * 30)
+                        print(f"현재 페이지 날짜: {current_date.strftime('%Y-%m-%d')}")
+                        print("=" * 30)
+                    else:
+                        # date 파라미터가 없는 경우 직접 추가
+                        next_date = current_date - timedelta(days=1)
+                        next_date_str = next_date.strftime('%Y%m%d')
+                        if '?' in current_url:
+                            next_url = f"{current_url}&date={next_date_str}"
+                        else:
+                            next_url = f"{current_url}?date={next_date_str}"
+                        self.driver.get(next_url)
+                        time.sleep(1)  # 3초에서 1초로 감소
+                        page_count = 1
+                        previous_date = current_date
+                        current_date = next_date
+                        print("=" * 30)
+                        print(f"현재 페이지 날짜: {current_date.strftime('%Y-%m-%d')}")
+                        print("=" * 30)
                     
             except TimeoutException:
                 print("페이지 로딩 시간 초과. 현재까지 수집된 데이터를 저장합니다.")
@@ -315,7 +478,7 @@ class NaverNewsCrawler:
             # 컬럼 순서 지정
             columns = [
                 'title', 'content', 'press', 'url', 'created_date', 'modified_date',
-                'journalist', 'image_url', 'comment_count', 'related_titles', 'related_urls'
+                'journalist', 'comment_count', 'related_titles', 'related_urls'
             ]
             df = df[columns]
             
