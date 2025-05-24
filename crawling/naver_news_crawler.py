@@ -31,6 +31,13 @@ class NaverNewsCrawler:
         chrome_options.add_argument('--disable-webgl')  # WebGL 비활성화
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])  # 로그 스위치 비활성화
         chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument('--disable-extensions')  # 확장 프로그램 비활성화
+        chrome_options.add_argument('--disable-popup-blocking')  # 팝업 차단 비활성화
+        chrome_options.add_argument('--disable-infobars')  # 정보 표시줄 비활성화
+        chrome_options.add_argument('--disable-notifications')  # 알림 비활성화
+        chrome_options.add_argument('--disable-gpu-sandbox')  # GPU 샌드박스 비활성화
+        chrome_options.add_argument('--no-first-run')  # 첫 실행 설정 건너뛰기
+        chrome_options.add_argument('--no-default-browser-check')  # 기본 브라우저 확인 건너뛰기
         
         # 웹드라이버 설정
         service = Service()
@@ -374,8 +381,13 @@ class NaverNewsCrawler:
                             pass
                             
                     except Exception as e:
-                        # print(f"뉴스 항목 처리 중 에러 발생: {str(e)}")
-                        pass
+                        if "invalid session id" in str(e):
+                            print("브라우저 세션이 종료되었습니다. 재연결을 시도합니다...")
+                            self.reconnect_browser()
+                            # 현재 페이지부터 다시 시작
+                            return self.crawl_press_news(press_name, start_date, end_date)
+                        else:
+                            print(f"에러 발생: {str(e)}")
                     finally:
                         # 탭이 열려있다면 닫기
                         if len(self.driver.window_handles) > 1:
@@ -463,36 +475,54 @@ class NaverNewsCrawler:
                 break
                 
         # DataFrame 생성 및 저장
-        if news_data:
-            # 관련 기사 정보를 별도의 컬럼으로 분리
-            for news in news_data:
-                if 'related_articles' in news:
-                    related_titles = [article['title'] for article in news['related_articles']]
-                    related_urls = [article['url'] for article in news['related_articles']]
-                    news['related_titles'] = '|'.join(related_titles)
-                    news['related_urls'] = '|'.join(related_urls)
-                    del news['related_articles']
-            
-            df = pd.DataFrame(news_data)
-            
-            # 컬럼 순서 지정
-            columns = [
-                'title', 'content', 'press', 'url', 'created_date', 'modified_date',
-                'journalist', 'comment_count', 'related_titles', 'related_urls'
-            ]
-            df = df[columns]
-            
-            # data 디렉토리가 없으면 생성
-            os.makedirs('data', exist_ok=True)
-            
-            # 파일명에 날짜 포함
-            filename = f"data/{press_name}_politics_news_{start_date}_to_{end_date}.csv"
-            df.to_csv(filename, index=False, encoding='utf-8-sig')
-            print(f"\n크롤링 완료: {len(news_data)}개의 정치 뉴스가 {filename}에 저장되었습니다.")
-        else:
-            print("\n수집된 정치 뉴스가 없습니다.")
+        try:
+            if news_data:
+                # 관련 기사 정보를 별도의 컬럼으로 분리
+                for news in news_data:
+                    if 'related_articles' in news:
+                        related_titles = [article['title'] for article in news['related_articles']]
+                        related_urls = [article['url'] for article in news['related_articles']]
+                        news['related_titles'] = '|'.join(related_titles)
+                        news['related_urls'] = '|'.join(related_urls)
+                        del news['related_articles']
+                
+                df = pd.DataFrame(news_data)
+                
+                # 컬럼 순서 지정
+                columns = [
+                    'title', 'content', 'press', 'url', 'created_date', 'modified_date',
+                    'journalist', 'comment_count', 'related_titles', 'related_urls'
+                ]
+                df = df[columns]
+                
+                # data 디렉토리가 없으면 생성
+                os.makedirs('data', exist_ok=True)
+                
+                # 파일명에 날짜 포함
+                filename = f"data/{press_name}_politics_news_{start_date}_to_{end_date}.csv"
+                df.to_csv(filename, index=False, encoding='utf-8-sig')
+                print(f"\n크롤링 완료: {len(news_data)}개의 정치 뉴스가 {filename}에 저장되었습니다.")
+            else:
+                print("\n수집된 정치 뉴스가 없습니다.")
+        except Exception as e:
+            print(f"\n데이터 저장 중 오류 발생: {str(e)}")
+            # 임시 파일로 저장 시도
+            try:
+                temp_filename = f"data/{press_name}_politics_news_temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                df.to_csv(temp_filename, index=False, encoding='utf-8-sig')
+                print(f"임시 파일로 저장 완료: {temp_filename}")
+            except Exception as e2:
+                print(f"임시 파일 저장도 실패: {str(e2)}")
         
     def close(self):
         """브라우저 종료"""
         self.driver.quit() 
+        
+    def reconnect_browser(self):
+        """브라우저 재연결"""
+        try:
+            self.driver.quit()
+        except:
+            pass
+        self.__init__() 
         
