@@ -123,7 +123,8 @@ class NaverNewsCrawler:
                 '테크홀릭': '093',
                 'IT조선': '094',
                 'IT동아': '095',
-                'IT월드': '096'
+                'IT월드': '096',
+                '오마이뉴스': '047'
             }
             
             if press_name in press_ids:
