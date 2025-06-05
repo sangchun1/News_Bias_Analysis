@@ -185,6 +185,8 @@ cython_debug/
 *.h5
 *.ckpt
 data/
+multitask_logs/
+multitask_results/
 
 # Anaconda
 .conda/
