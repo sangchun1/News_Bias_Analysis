@@ -187,6 +187,10 @@ cython_debug/
 data/
 multitask_logs/
 multitask_results/
+news_bias_logs/
+news_bias_results/
+news_bias_longformer_logs/
+news_bias_longformer_results/
 
 # Anaconda
 .conda/
