@@ -191,6 +191,7 @@ news_bias_logs/
 news_bias_results/
 news_bias_longformer_logs/
 news_bias_longformer_results/
+preprocess/SentiWord_Dict.txt
 
 # Anaconda
 .conda/
