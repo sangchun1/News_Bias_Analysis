@@ -1,8 +1,46 @@
-pandas==2.1.0
-numpy==1.24.3
+# Core Data Processing
+pandas==2.2.1
+numpy==1.26.4
+
+# Machine Learning & Deep Learning
 torch==2.0.1
 transformers==4.31.0
 scikit-learn==1.3.0
-matplotlib==3.7.2
-seaborn==0.12.2
-tqdm==4.65.0 
+sentence-transformers==2.2.2
+
+# Web Scraping & Crawling
+selenium==4.18.1
+webdriver-manager==4.0.1
+beautifulsoup4==4.12.3
+requests==2.31.0
+
+# Korean NLP
+konlpy==0.6.0
+
+# Visualization
+matplotlib==3.8.3
+seaborn==0.13.2
+
+# Jupyter & Development
+jupyter==1.0.0
+notebook==7.0.7
+ipykernel==6.29.3
+
+# Utilities
+tqdm==4.66.2
+python-dateutil==2.8.2
+
+# Hyperparameter Optimization
+optuna==3.4.0
+
+# Google Colab Integration (optional)
+gspread==5.12.0
+google-auth-oauthlib==1.1.0
+
+# Statistics & Evaluation
+statsmodels==0.14.0
+
+# Additional Utilities
+sentencepiece==0.1.99
+xlsxwriter==3.1.9
+safetensors==0.4.0 
