@@ -33,23 +33,26 @@
 
 ### 3. 다중 태스크 딥러닝 모델 (`model/multitask_model.ipynb`)
 - **모델 아키텍처**: 
-  - BERT 기반 인코더 (한국어 사전학습 모델)
+  - BERT 기반 인코더 (`klue/roberta-base` 사전학습 모델)
   - BiLSTM 레이어로 문맥 정보 강화
   - 정당 분류기 + 감성 분류기 (긍정/중립/부정)
 - **특징**:
   - 클래스 불균형 해결을 위한 가중 손실 함수
   - Early Stopping 및 Learning Rate Scheduling
   - 멀티태스크 학습으로 모델 효율성 향상
+- **사전학습 모델**: `klue/roberta-base` (한국어 RoBERTa)
 
 ### 4. Longformer 확장 모델 (`model/multitask_model_longformer.ipynb`)
 - **긴 텍스트 처리**: 최대 4096 토큰까지 처리 가능
 - **문서 수준 분석**: 전체 기사 내용을 고려한 편향성 분석
+- **사전학습 모델**: `allenai/longformer-base-4096` (긴 문서 처리용)
 
 ### 5. 뉴스 요약 및 추천 시스템 (`summarization/1. sbert_based_generative.ipynb`)
 - **키워드 기반 필터링**: 사용자 관심 키워드로 관련 기사 추출
 - **SBERT 임베딩**: `snunlp/KR-SBERT-V40K-klueNLI-augSTS` 모델 사용
 - **클러스터링**: K-means로 유사 기사 그룹화
 - **중립성 기반 추천**: 편향성 점수를 고려한 기사 순위화
+- **자동 요약**: `digit82/kobart-summarization` 모델로 기사 요약 생성
 
 ### 6. 편향성 지수 통합 분석 (`model/통합 편향성 지수.ipynb`)
 - **종합 편향성 지표**: 정당 성향 + 감성 분석 결과 통합
@@ -111,9 +114,10 @@
 ### 머신러닝 & 딥러닝
 - **프레임워크**: PyTorch 2.0.1, Transformers 4.31.0
 - **모델**: 
-  - 한국어 BERT (다중 태스크 학습)
-  - Longformer (긴 텍스트 처리)
-  - KR-SBERT (문장 임베딩)
+  - 한국어 BERT (`klue/roberta-base`) - 다중 태스크 학습
+  - Longformer (`allenai/longformer-base-4096`) - 긴 텍스트 처리
+  - KR-SBERT (`snunlp/KR-SBERT-V40K-klueNLI-augSTS`) - 문장 임베딩
+  - KoBART (`digit82/kobart-summarization`) - 한국어 요약
 - **평가**: Scikit-learn 1.3.0, F1-score, 정확도
 
 ### 시각화 & 분석
